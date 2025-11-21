@@ -1,6 +1,8 @@
 # About
 
-A small Python command-line client for interacting with an AudioBookShelf server
+A small, unofficial, Python command-line client for interacting with an AudioBookShelf server
+
+abscli is in no way affiliated with AudioBookShelf.
 
 ### WARNING
 
@@ -10,7 +12,7 @@ Additionally, while this tool should work on Windows and MacOS, it is currently 
 
 ### Features
 
-- List libraries, collections, series, genres and books with a simple filtering option.
+- List libraries, collections, series, genres, and books with a simple filtering option.
 
 - Powerful search feature for books
 

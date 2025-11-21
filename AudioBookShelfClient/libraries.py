@@ -42,7 +42,7 @@ class Libraries:
 
     def get_all(self) -> Optional[List[Any]]:
         self.__load_libraries()
-        return self.cache
+        return [library for library in self.cache if library.mediaType == 'book']
 
     def get_all_summary(self) -> Optional[List[Dict[str, Any]]]:
         libraries = self.get_all()

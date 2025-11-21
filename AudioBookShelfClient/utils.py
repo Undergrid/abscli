@@ -35,6 +35,7 @@ class Utils:
 
     @staticmethod
     def apply_filter(data: List[Dict[str, Any]], filter: str, exact: bool = False, field: str = 'name') -> List[Dict[str, Any]]:
+        field = Utils.replace_shortcuts(field, False)
         if exact:
             return [item for item in data if filter == item.get(field, '')]
         else:

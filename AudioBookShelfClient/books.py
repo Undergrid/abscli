@@ -3,6 +3,9 @@ from typing import Optional, Dict, Any, List
 from AudioBookShelfClient import Utils
 from AudioBookShelfClient.__book_cache import BookCache, DataException
 
+class NoBooksException(Exception):
+    def __init__(self, message):
+        self.message = message
 
 class Books:
 
@@ -17,7 +20,7 @@ class Books:
             if self.__bookCache is None:#
                 self.__bookCache = BookCache(library_id, self.base_url, self.api_key)
         except DataException as e:
-            raise ValueError(f"Library with ID '{library_id}': {e.message}")
+            raise NoBooksException(f"Library with ID '{library_id}': {e.message}")
 
     def get_fields(self) -> Optional[List[str]]:
         self.__load_books(self.library_id)

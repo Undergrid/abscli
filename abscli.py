@@ -1,12 +1,13 @@
 import argparse
+import shutil
 import sys
 from typing import Optional, List
 
 from _duckdb import BinderException
 
-from AudioBookShelfClient import Config, Libraries, Utils, Collections, Books, Series, Filters
+from AudioBookShelfClient import *
 
-_VERSION = "0.0.1"
+_VERSION = "0.0.2"
 
 class StripQuotesAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -26,12 +27,16 @@ def setup_parser():
     common_parser.add_argument("--server", type=str, required=True, help="Path to config file")
 
     lib_opt_parser = argparse.ArgumentParser(add_help=False, exit_on_error=True, parents=[common_parser])
-    lib_opt_parser.add_argument("--library", type=str, required=False, help="Name of the library to query")
+    lib_opt_parser_lib = lib_opt_parser.add_mutually_exclusive_group(required=False)
+    lib_opt_parser_lib.add_argument("--library", type=str, help="Name of the library to query")
+    lib_opt_parser_lib.add_argument("--all", action='store_true', help="Run the command on all libraries")
 
     lib_req_parser = argparse.ArgumentParser(add_help=False, exit_on_error=True, parents=[common_parser])
-    lib_req_parser.add_argument("--library", type=str, required=True, help="Name of the library to query")
+    lib_req_parser_lib = lib_req_parser.add_mutually_exclusive_group(required=True)
+    lib_req_parser_lib.add_argument("--library", type=str, help="Name of the library to query")
+    lib_req_parser_lib.add_argument("--all", action='store_true', help="Run the command on all libraries")
 
-    parser = argparse.ArgumentParser(description="AudioBookShelf Client", exit_on_error=True)
+    parser = argparse.ArgumentParser(description="abscli is an unofficial command line AudioBookShelf API Client", exit_on_error=True)
     parser.add_argument("--version", action="version", version=f"%(prog)s {_VERSION}")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -137,8 +142,26 @@ class abscli:
 
     def perform_list(self, args):
         self.__load_libraries()
-        library = self.libraries.get_by_name(args.library)
+        libraries = None
+        if args.all:
+            libraries = self.libraries.get_all()
+        elif args.library:
+            library = self.libraries.get_by_name(args.library)
+            if not library:
+                print(f"Error: Library '{args.library}' not found", file=sys.stderr)
+                sys.exit(1)
+            libraries = [library] if library else None
 
+        if libraries:
+            for library in libraries:
+                if args.all:
+                    print(f"\n\nLibrary: {library.name}")
+                    print("-" * shutil.get_terminal_size().columns)
+                self.__do_list(args, library)
+        else:
+            self.__do_list(args)
+
+    def __do_list(self, args, library: Optional[Library] = None):
         data = None
         with_id = args.with_id
         fields: Optional[List[str]] = ['name', "id" if with_id else None]
@@ -157,10 +180,14 @@ class abscli:
                 if not library:
                     fields.insert(1, "library")
             case "books":
-                self.__load_books(library.id)
-                data = self.books.get_all()
-                filter_field = args.field
-                fields = ['media.metadata.title', 'media.metadata.authorName', "id" if with_id else None]
+                try:
+                    self.__load_books(library.id)
+                    data = self.books.get_all()
+                    filter_field = args.field
+                    fields = ['media.metadata.title', 'media.metadata.authorName', "id" if with_id else None]
+                except NoBooksException as e:
+                    print(f"{e}")
+                    return
             case "genres":
                 self.__load_filters(library.id)
                 data = self.filters.get_genres()
@@ -168,11 +195,15 @@ class abscli:
 
         if args.filter:
             data = Utils.apply_filter(data, args.filter, args.exact, filter_field)
-        Utils.print(data, fields, args.seperator)
+        if data:
+            Utils.print(data, fields, args.seperator)
+        elif args.all:
+            print(f"Library with ID '{library.id}': No matches found")
 
-    def __do_search(self, args, display: bool = True):
-        self.__load_libraries()
-        library = self.libraries.get_by_name(args.library)
+    def __do_search(self, args, display: bool = True, library: Optional[Library] = None):
+        if not library:
+            self.__load_libraries()
+            library = self.libraries.get_by_name(args.library)
         self.__load_books(library.id)
 
         columns = ['media.metadata.title', 'media.metadata.authorName', "id"]
@@ -181,16 +212,41 @@ class abscli:
         sort = Utils.replace_shortcuts(args.sort) or Utils.replace_shortcuts('_TITLE')
         if args.display:
             columns = [Utils.replace_shortcuts(item, False) for item in args.display]
-        result = self.books.where(where, sort)
+        try:
+            result = self.books.where(where, sort)
+        except NoBooksException as e:
+            print(f"{e}")
+            return None, None
 
         if result:
             if display:
                 Utils.print(result, columns)
             return where, result
+        elif display:
+            print(f"Library with ID '{library.id}': No matches found")
         return where, None
 
     def perform_search(self, args):
-        self.__do_search(args, True)
+        self.__load_libraries()
+        libraries = None
+        if args.all:
+            libraries = self.libraries.get_all()
+        elif args.library:
+            library = self.libraries.get_by_name(args.library)
+            if not library:
+                print(f"Error: Library '{args.library}' not found", file=sys.stderr)
+                sys.exit(1)
+            libraries = [library] if library else None
+
+        if libraries:
+            for library in libraries:
+                if args.all:
+                    print(f"\n\nLibrary: {library.name}")
+                    print("-" * shutil.get_terminal_size().columns)
+                self.__do_search(args, True, library)
+        else:
+            self.__do_search(args, True)
+
 
     def perform_create(self, args):
         columns = ['media.metadata.title', 'media.metadata.authorName', "id"]
